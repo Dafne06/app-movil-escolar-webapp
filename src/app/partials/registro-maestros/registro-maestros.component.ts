@@ -2,6 +2,7 @@ import { Component, Input, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { FacadeService } from 'src/app/services/facade.service';
 import { Location } from '@angular/common';
+import { MaestrosService } from 'src/app/services/maestros.service';
 
 @Component({
   selector: 'app-registro-maestros',
@@ -52,10 +53,22 @@ export class RegistroMaestrosComponent implements OnInit {
     private router: Router,
     private location : Location,
     public activatedRoute: ActivatedRoute,
-    private facadeService: FacadeService
+    private facadeService: FacadeService,
+    private maestrosService: MaestrosService
   ) { }
 
   ngOnInit(): void {
+    if (this.activatedRoute.snapshot.params['id'] != undefined) {
+      this.editar = true;
+      this.idUser = this.activatedRoute.snapshot.params['id'];
+      this.maestro = this.datos_user;
+    } else {
+      this.maestro = this.maestrosService.esquemaMaestro();
+      this.maestro.rol = this.rol;
+      this.maestro.materias = []; // Inicializar arreglo obligatorio
+      this.token = this.facadeService.getSessionToken();
+    }
+    console.log("Maestro: ", this.maestro);
   }
 
   public regresar(){
@@ -63,7 +76,40 @@ export class RegistroMaestrosComponent implements OnInit {
   }
 
   public registrar(){
+    this.errors = {};
+    this.errors = this.maestrosService.validarMaestro(this.maestro, this.editar);
+    if(Object.keys(this.errors).length > 0){
+      return false;
+    }
+    // Validar si las contraseñas coinciden
 
+    if(this.maestro.password != this.maestro.confirmar_password){
+      alert('Las contraseñas no coinciden');
+      return false;
+    }
+
+    // Consumir servicio para registrar administradores
+    this.maestrosService.registrarMaestro(this.maestro).subscribe({
+      next: (response:any) => {
+        //Aquí va la ejecución del servicio si todo es correcto
+        alert('Maestro registrado con éxito');
+        console.log("Maestro registrado",response);
+
+        //Validar si se registro
+        if(this.token != ""){
+          this.router.navigate(['maestros']);
+        }else{
+          this.router.navigate(['/']);
+        }
+      },
+      error: (error:any) => {
+        if(error.status === 422){
+          this.errors = error.error.errors;
+        } else {
+          alert('Error al registrar el maestro');
+        }
+      }
+    });
   }
 
   public actualizar(){
@@ -109,12 +155,12 @@ export class RegistroMaestrosComponent implements OnInit {
   public checkboxChange(event:any){
     console.log("Evento: ", event);
     if(event.checked){
-      this.maestro.materias_json.push(event.source.value)
+      this.maestro.materias.push(event.source.value)
     }else{
       console.log(event.source.value);
-      this.maestro.materias_json.forEach((materia, i) => {
+      this.maestro.materias.forEach((materia, i) => {
         if(materia == event.source.value){
-          this.maestro.materias_json.splice(i,1)
+          this.maestro.materias.splice(i,1)
         }
       });
     }
@@ -122,8 +168,8 @@ export class RegistroMaestrosComponent implements OnInit {
   }
 
   public revisarSeleccion(nombre: string){
-    if(this.maestro.materias_json){
-      var busqueda = this.maestro.materias_json.find((element)=>element==nombre);
+    if(this.maestro.materias){
+      var busqueda = this.maestro.materias.find((element)=>element==nombre);
       if(busqueda != undefined){
         return true;
       }else{
